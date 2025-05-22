@@ -1,0 +1,57 @@
+version: '3'
+
+services:
+  zookeeper:
+    image: bitnami/zookeeper:latest
+    ports:
+      - "2181:2181"
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    networks:
+      - kafka_network
+
+  kafka:
+    image: bitnami/kafka:latest
+    ports:
+      - "9092:9092"
+    environment:
+      # Kafka broker ID
+      - KAFKA_BROKER_ID=1
+      # Connect to ZooKeeper
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      # Listeners for internal and external communication
+      # PLAINTEXT is for unencrypted communication, suitable for dev
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092
+      # Advertised listener for clients to connect to Kafka.
+      # Use `localhost` if running Docker Desktop, or your host machine's IP.
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092
+      # Enable automatic topic creation (good for dev)
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      # Wait for ZooKeeper to be ready
+      - KAFKA_ZOOKEEPER_PROTOCOL=PLAINTEXT
+      - KAFKA_CFG_DELETE_TOPIC_ENABLE=true # Allows deleting topics (useful in dev)
+      - KAFKA_CFG_LOG_DIRS=/bitnami/kafka/data/logs # Default log directory
+    depends_on:
+      - zookeeper # Ensure ZooKeeper starts before Kafka
+    networks:
+      - kafka_network
+
+  # Optional: Kafka UI for easier management (e.g., Topic creation/deletion, message Browse)
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "8080:8080"
+    restart: always
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=local-kafka
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092 # Connects to the 'kafka' service in the same network
+      - KAFKA_CLUSTERS_0_ZOOKEEPER=zookeeper:2181
+    depends_on:
+      - kafka
+    networks:
+      - kafka_network
+
+networks:
+  kafka_network:
+    driver: bridge
