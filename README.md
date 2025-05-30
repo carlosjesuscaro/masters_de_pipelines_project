@@ -9,5 +9,5 @@
 5. Use GitHub actions with automated testing
 
 ## Notes:
-- API to use: https://gnews.io/
+- API to use: https://gn    ews.io/
 - 

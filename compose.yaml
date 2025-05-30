@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    hostname: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    hostname: kafka
+    ports:
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+  kafka-topic-creator:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka-topic-creator
+    depends_on:
+      - kafka
+    command: "bash -c 'echo Waiting for Kafka to be ready... && \
+              cub kafka-ready -b kafka:9092 1 20 && \
+              kafka-topics --create --if-not-exists --topic api_events --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1 && \
+              kafka-topics --create --if-not-exists --topic word_counts_output --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1'"
+
+  spark-master:
+    image: bitnami/spark:3.5.0
+    container_name: spark-master
+    hostname: spark-master
+    ports:
+      - "8080:8080" # Spark UI
+      - "7077:7077" # Master Port
+    environment:
+      - SPARK_MODE=master
+
+  spark-worker:
+    image: bitnami/spark:3.5.0
+    container_name: spark-worker
+    hostname: spark-worker
+    depends_on:
+      - spark-master
+      - kafka
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    volumes:
+      - ./spark_scripts:/opt/spark-apps # Mount your local spark_scripts directory
+    command: bash -c "sleep 30 && tail -f /dev/null" # Keep container alive for job submission
+
+  gnews-service:
+    # Use a base Python image if you don't need a custom Dockerfile,
+    # and install dependencies via requirements.txt
+    image: python:3.9-slim
+    container_name: gnews-service
+    ports:
+      - "5000:5000" # Example port if your GNews service has an API endpoint
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: api_events
+      GNEWS_API_KEY: "e3e96cfdbd78399e8e66657c133ed3d5" # <--- IMPORTANT: Replace with your actual Gnews API Key
+      # Add any other environment variables your GNews service needs
+    volumes:
+      - ./gnews_app:/app # <--- Mount your gnews_app directory
+    working_dir: /app
+    command: bash -c "pip install -r requirements.txt && python app.py" # Install dependencies and run your script
+
+# Volumes for persistent data (if needed)
+volumes:
+  spark_data:
+  gnews_data: # You can use this for any persistent data needed by gnews-service if applicable
