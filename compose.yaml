@@ -78,6 +78,24 @@ services:
     working_dir: /app
     command: bash -c "pip install --upgrade pip && pip install -r requirements.txt && python app.py" # Install dependencies and run your script
 
+  zeppelin:
+    image: apache/zeppelin:0.10.1 # Or your preferred version
+    container_name: zeppelin
+    ports:
+      - "8088:8080" # Zeppelin's UI port
+      - "4040:4040" # Spark UI (optional, for monitoring)
+    environment:
+      ZEPPELIN_SPARK_MASTER: spark://spark-master:7077
+      ZEPPELIN_NOTEBOOK_DIR: "/notebooks" # Where Zeppelin will store notebooks
+      PYSPARK_SUBMIT_ARGS: "--packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0 pyspark-shell"
+      SPARK_HOME: /opt/spark # This is the typical SPARK_HOME inside Bitnami Spark containers
+      SPARK_SCALA_VERSION: 2.12 # <--- Explicitly tell Zeppelin the Scala version
+    volumes:
+      - ./zeppelin_notebooks:/notebooks # Mount a local directory for your notebooks
+    depends_on:
+      - spark-master
+      - kafka # If you need direct Kafka access from Zeppelin
+
 # Volumes for persistent data (if needed)
 volumes:
   spark_data:
