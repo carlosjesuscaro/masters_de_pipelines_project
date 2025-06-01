@@ -43,6 +43,8 @@ services:
       - "7077:7077" # Master Port
     environment:
       - SPARK_MODE=master
+    volumes:
+      - spark-master-spark-home:/opt/bitnami/spark
 
   spark-worker:
     image: bitnami/spark:3.5.0
@@ -55,48 +57,50 @@ services:
       - SPARK_MODE=worker
       - SPARK_MASTER_URL=spark://spark-master:7077
     volumes:
-      - ./spark_scripts:/opt/spark-apps # Mount your local spark_scripts directory
-    command: bash -c "sleep 30 && tail -f /dev/null" # Keep container alive for job submission
+      - ./spark_scripts:/opt/spark-apps
+    command: bash -c "sleep 30 && tail -f /dev/null"
 
   gnews-service:
-    # Use a base Python image if you don't need a custom Dockerfile,
-    # and install dependencies via requirements.txt
     image: python:3.9-slim
     hostname: gnews
     container_name: gnews-service
     ports:
-      - "5000:5000" # Example port if your GNews service has an API endpoint
+      - "5000:5000"
     depends_on:
       - kafka
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_TOPIC: api_events
-      GNEWS_API_KEY: ${GNEWS_API_KEY} # <--- IMPORTANT: Replace with your actual Gnews API Key
-      # Add any other environment variables your GNews service needs
+      GNEWS_API_KEY: ${GNEWS_API_KEY}
     volumes:
-      - ./gnews_app:/app # <--- Mount your gnews_app directory
+      - ./gnews_app:/app
     working_dir: /app
-    command: bash -c "pip install --upgrade pip && pip install -r requirements.txt && python app.py" # Install dependencies and run your script
+    command: bash -c "pip install --upgrade pip && pip install -r requirements.txt && python app.py"
 
-  zeppelin:
-    image: apache/zeppelin:0.10.1 # Or your preferred version
-    container_name: zeppelin
+  jupyter:
+    build:
+      context: .
+      dockerfile: jupyter.Dockerfile
+    container_name: jupyter_notebook
     ports:
-      - "8088:8080" # Zeppelin's UI port
-      - "4040:4040" # Spark UI (optional, for monitoring)
+      - "8890:8888" # Jupyter UI
     environment:
-      ZEPPELIN_SPARK_MASTER: spark://spark-master:7077
-      ZEPPELIN_NOTEBOOK_DIR: "/notebooks" # Where Zeppelin will store notebooks
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_APP_NAME: JupyterPySparkApp
       PYSPARK_SUBMIT_ARGS: "--packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0 pyspark-shell"
-      SPARK_HOME: /opt/spark # This is the typical SPARK_HOME inside Bitnami Spark containers
-      SPARK_SCALA_VERSION: 2.12 # <--- Explicitly tell Zeppelin the Scala version
+      JUPYTER_ENABLE_LAB: "yes" # Use JupyterLab interface
+      GRANT_SUDO: "yes"
+      NB_UID: 1000
+      NB_GID: 100
     volumes:
-      - ./zeppelin_notebooks:/notebooks # Mount a local directory for your notebooks
+      - ./jupyter_notebooks:/home/jovyan/work # Mount your local directory for notebooks
     depends_on:
       - spark-master
-      - kafka # If you need direct Kafka access from Zeppelin
+      - kafka
 
-# Volumes for persistent data (if needed)
+# Volumes for persistent data
 volumes:
   spark_data:
-  gnews_data: # You can use this for any persistent data needed by gnews-service if applicable
+  gnews_data:
+  jupyter_notebooks:
+  spark-master-spark-home:
