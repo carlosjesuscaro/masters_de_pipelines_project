@@ -58,7 +58,7 @@ services:
       - SPARK_MASTER_URL=spark://spark-master:7077
     volumes:
       - ./spark_scripts:/opt/spark-apps
-    command: bash -c "sleep 30 && tail -f /dev/null"
+    # command: bash -c "sleep 30 && tail -f /dev/null"
 
   gnews-service:
     image: python:3.9-slim
@@ -87,7 +87,8 @@ services:
     environment:
       SPARK_MASTER_URL: spark://spark-master:7077
       SPARK_APP_NAME: JupyterPySparkApp
-      PYSPARK_SUBMIT_ARGS: "--packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0 pyspark-shell"
+#      PYSPARK_SUBMIT_ARGS: "--packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0 pyspark-shell"
+      PYSPARK_SUBMIT_ARGS: "--packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0 --conf spark.pyspark.python=/opt/bitnami/python/bin/python3 --conf spark.pyspark.driver.python=/opt/bitnami/python/bin/python3 pyspark-shell"
       JUPYTER_ENABLE_LAB: "yes" # Use JupyterLab interface
       JUPYTER_TOKEN: ${JUPYTER_TOKEN}
       GRANT_SUDO: "yes"
