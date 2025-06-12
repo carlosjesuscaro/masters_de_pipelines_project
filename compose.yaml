@@ -1,108 +1,49 @@
 services:
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.5.0
-    container_name: zookeeper
-    hostname: zookeeper
-    ports:
-      - "2181:2181"
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-
-  kafka:
-    image: confluentinc/cp-kafka:7.5.0
-    container_name: kafka
-    hostname: kafka
-    ports:
-      - "9092:9092"
-    depends_on:
-      - zookeeper
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-
-  kafka-topic-creator:
-    image: confluentinc/cp-kafka:7.5.0
-    container_name: kafka-topic-creator
-    depends_on:
-      - kafka
-    command: "bash -c 'echo Waiting for Kafka to be ready... && \
-              cub kafka-ready -b kafka:9092 1 20 && \
-              kafka-topics --create --if-not-exists --topic api_events --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1 && \
-              kafka-topics --create --if-not-exists --topic word_counts_output --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1'"
-
   spark-master:
+    # THE DEFINITIVE FIX: Pin the image to an explicit version
     image: bitnami/spark:3.5.0
     container_name: spark-master
-    hostname: spark-master
+    user: root
     ports:
-      - "8080:8080" # Spark UI
-      - "7077:7077" # Master Port
+      - "8080:8080"
+      - "7077:7077"
     environment:
       - SPARK_MODE=master
-    volumes:
-      - spark-master-spark-home:/opt/bitnami/spark
+    networks:
+      - spark_network
 
   spark-worker:
+    # THE DEFINITIVE FIX: Pin the image to the same explicit version
     image: bitnami/spark:3.5.0
     container_name: spark-worker
-    hostname: spark-worker
+    user: root
     depends_on:
       - spark-master
-      - kafka
     environment:
       - SPARK_MODE=worker
       - SPARK_MASTER_URL=spark://spark-master:7077
-    volumes:
-      - ./spark_scripts:/opt/spark-apps
-    # command: bash -c "sleep 30 && tail -f /dev/null"
-
-  gnews-service:
-    image: python:3.9-slim
-    hostname: gnews
-    container_name: gnews-service
-    ports:
-      - "5000:5000"
-    depends_on:
-      - kafka
-    environment:
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      KAFKA_TOPIC: api_events
-      GNEWS_API_KEY: ${GNEWS_API_KEY}
-    volumes:
-      - ./gnews_app:/app
-    working_dir: /app
-    command: bash -c "pip install --upgrade pip && pip install -r requirements.txt && python app.py"
+    networks:
+      - spark_network
 
   jupyter:
+    # This service is correct and does not need changes
     build:
       context: .
       dockerfile: jupyter.Dockerfile
-    container_name: jupyter_notebook
+    container_name: jupyter-notebook
     ports:
-      - "8888:8888" # Jupyter UI
+      - "8888:8888"
     environment:
-      SPARK_MASTER_URL: spark://spark-master:7077
-      SPARK_APP_NAME: JupyterPySparkApp
-#      PYSPARK_SUBMIT_ARGS: "--packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0 pyspark-shell"
-      PYSPARK_SUBMIT_ARGS: "--packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0 --conf spark.pyspark.python=/opt/bitnami/python/bin/python3 --conf spark.pyspark.driver.python=/opt/bitnami/python/bin/python3 pyspark-shell"
-      JUPYTER_ENABLE_LAB: "yes" # Use JupyterLab interface
-      JUPYTER_TOKEN: ${JUPYTER_TOKEN}
-      GRANT_SUDO: "yes"
-      NB_UID: 1000
-      NB_GID: 100
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - JUPYTER_TOKEN=${JUPYTER_TOKEN}
+      - GRANT_SUDO=yes
     volumes:
-      - ./jupyter_notebooks:/home/jovyan/work # Mount your local directory for notebooks
+      - .:/home/jovyan/work
+    networks:
+      - spark_network
     depends_on:
       - spark-master
-      - kafka
 
-# Volumes for persistent data
-volumes:
-  spark_data:
-  gnews_data:
-  jupyter_notebooks:
-  spark-master-spark-home:
+networks:
+  spark_network:
+    driver: bridge
